@@ -253,10 +253,6 @@ XECLEANUP:
   return result_code;
 }
 
-void ExecModule::AddFunctionsToMap(FunctionMap& map) {
-  codegen_->AddFunctionsToMap(map);
-}
-
 int ExecModule::InjectGlobals() {
   LLVMContext& context = *context_.get();
   const DataLayout* dl = engine_->getDataLayout();
@@ -275,6 +271,30 @@ int ExecModule::InjectGlobals() {
       "xe_memory_base");
   // Align to 64b - this makes SSE faster.
   gv->setAlignment(64);
+  gv->setInitializer(ConstantExpr::getIntToPtr(
+      ConstantInt::get(intPtrTy, (uintptr_t)xe_memory_addr(memory_, 0)),
+      int8PtrTy));
+
+  // xe_function_table
+  std::vector<Type*> exec_ty_args;
+  exec_ty_args.push_back(PointerType::get(IntegerType::get(context, 8), 0));
+  exec_ty_args.push_back(IntegerType::get(context, 32));
+  // void fn(i8* ppc_state, int32 lr)
+  FunctionType* exec_ty = FunctionType::get(
+      Type::getVoidTy(context), exec_ty_args, false);
+  // exec_ty**
+  Type* function_table_ty = PointerType::get(PointerType::get(exec_ty, 0), 0);
+  gv = new GlobalVariable(
+      *gen_module_,
+      function_table_ty,
+      true,
+      GlobalValue::ExternalLinkage,
+      0,
+      "xe_function_table");
+  gv->setAlignment(8);
+
+  size_t slot_count = (code_addr_high_ - code_addr_low_) / 4;
+  void** function_table = xe_calloc(slot_count * sizeof(void*));
   gv->setInitializer(ConstantExpr::getIntToPtr(
       ConstantInt::get(intPtrTy, (uintptr_t)xe_memory_addr(memory_, 0)),
       int8PtrTy));
@@ -336,6 +356,40 @@ int ExecModule::Uninit() {
 
   // Run static destructors.
   engine_->runStaticConstructorsDestructors(gen_module_.get(), true);
+
+  return 0;
+}
+
+int ExecModule::Execute(uint32_t address, xe_ppc_state* ppc_state) {
+  if (address < code_addr_low_ ||
+      address > code_addr_high_) {
+    return 1;
+  }
+
+  // This could be set to anything to give us a unique identifier to track
+  // re-entrancy/etc.
+  uint32_t lr = 0xBEBEBEBE;
+
+  // Setup registers.
+  ppc_state->lr = lr;
+
+  // Args:
+  // - i8* state
+  // - i64 lr
+
+  std::vector<GenericValue> args;
+  args.push_back(PTOGV(ppc_state));
+  GenericValue lr_arg;
+  lr_arg.IntVal = APInt(64, lr);
+  args.push_back(lr_arg);
+  GenericValue ret = engine_->runFunction(f, args);
+  return (uint32_t)ret.IntVal.getSExtValue();
+
+  // Faster, somewhat.
+  // Messes with the stack in such a way as to cause Xcode to behave oddly.
+  // typedef void (*fnptr)(xe_ppc_state_t*, uint64_t);
+  // fnptr ptr = (fnptr)engine_->getPointerToFunction(f);
+  // ptr(ppc_state, lr);
 
   return 0;
 }

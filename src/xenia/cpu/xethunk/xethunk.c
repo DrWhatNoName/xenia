@@ -29,11 +29,24 @@
 extern char* xe_memory_base;
 
 
+// Function table.
+// This table is large enough to cover all addressable functions in the
+// code memory space.
+// fn = xe_function_table[(addr >> 2) - low_code_addr]
+// If a function does not exist in this table then it must be generated on
+// demand.
+extern void** xe_function_table;
+
+
+// Initialize module statics and state.
+// Doing it here makes it easier to fail and get clean stacks/etc.
 int xe_module_init() {
   // TODO(benvanik): setup call table, etc?
 
   return 0;
 }
 
+
+// Uninitialize module statics and state.
 void xe_module_uninit() {
 }

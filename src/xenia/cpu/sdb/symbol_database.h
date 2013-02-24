@@ -44,6 +44,7 @@ public:
 
   void ReadMap(const char* file_name);
   void WriteMap(const char* file_name);
+
   void Dump(FILE* file);
   void DumpFunctionBlocks(FILE* file, FunctionSymbol* fn);
 

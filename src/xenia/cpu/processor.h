@@ -63,8 +63,6 @@ private:
   auto_ptr<llvm::LLVMContext> dummy_context_;
 
   std::vector<ExecModule*> modules_;
-
-  FunctionMap all_fns_;
 };
 
 

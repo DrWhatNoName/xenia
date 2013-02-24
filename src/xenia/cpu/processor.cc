@@ -147,7 +147,6 @@ int Processor::LoadBinary(const xechar_t* path, uint32_t start_address,
     return 1;
   }
 
-  exec_module->AddFunctionsToMap(all_fns_);
   modules_.push_back(exec_module);
 
   exec_module->Dump();
@@ -173,7 +172,6 @@ int Processor::PrepareModule(const char* name, const char* path,
     return 1;
   }
 
-  exec_module->AddFunctionsToMap(all_fns_);
   modules_.push_back(exec_module);
 
   return 0;
@@ -196,56 +194,25 @@ void Processor::DeallocThread(ThreadState* thread_state) {
 }
 
 int Processor::Execute(ThreadState* thread_state, uint32_t address) {
-  // Find the function to execute.
-  Function* f = GetFunction(address);
-  if (!f) {
-    XELOGCPU("Failed to find function %.8X to execute.", address);
-    return 1;
-  }
-
   xe_ppc_state_t* ppc_state = thread_state->ppc_state();
 
-  // This could be set to anything to give us a unique identifier to track
-  // re-entrancy/etc.
-  uint32_t lr = 0xBEBEBEBE;
+  // TODO(benvanik): faster search of containing module.
+  for (std::vector<ExecModule*>::iterator it = modules_.begin();
+       it != modules_.end(); ++it) {
+    if (!it->Execute(address, ppc_state)) {
+      return 0;
+    }
+  }
 
-  // Setup registers.
-  ppc_state->lr = lr;
-
-  // Args:
-  // - i8* state
-  // - i64 lr
-  std::vector<GenericValue> args;
-  args.push_back(PTOGV(ppc_state));
-  GenericValue lr_arg;
-  lr_arg.IntVal = APInt(64, lr);
-  args.push_back(lr_arg);
-  GenericValue ret = engine_->runFunction(f, args);
-  // return (uint32_t)ret.IntVal.getSExtValue();
-
-  // Faster, somewhat.
-  // Messes with the stack in such a way as to cause Xcode to behave oddly.
-  // typedef void (*fnptr)(xe_ppc_state_t*, uint64_t);
-  // fnptr ptr = (fnptr)engine_->getPointerToFunction(f);
-  // ptr(ppc_state, lr);
-
-  return 0;
+  return 1;
 }
 
 uint64_t Processor::Execute(ThreadState* thread_state, uint32_t address,
-                       uint64_t arg0) {
+                            uint64_t arg0) {
   xe_ppc_state_t* ppc_state = thread_state->ppc_state();
   ppc_state->r[3] = arg0;
   if (Execute(thread_state, address)) {
     return 0xDEADBABE;
   }
   return ppc_state->r[3];
-}
-
-Function* Processor::GetFunction(uint32_t address) {
-  FunctionMap::iterator it = all_fns_.find(address);
-  if (it != all_fns_.end()) {
-    return it->second;
-  }
-  return NULL;
 }

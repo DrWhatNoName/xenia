@@ -38,9 +38,6 @@ namespace xe {
 namespace cpu {
 
 
-typedef std::tr1::unordered_map<uint32_t, llvm::Function*> FunctionMap;
-
-
 class ExecModule {
 public:
   ExecModule(
@@ -52,7 +49,7 @@ public:
   int PrepareXex(xe_xex2_ref xex);
   int PrepareRawBinary(uint32_t start_address, uint32_t end_address);
 
-  void AddFunctionsToMap(FunctionMap& map);
+  int Execute(uint32_t address, xe_ppc_state* ppc_state);
 
   void Dump();
 
@@ -74,7 +71,6 @@ private:
 
   uint32_t    code_addr_low_;
   uint32_t    code_addr_high_;
-  FunctionMap fns_;
 };
 
 

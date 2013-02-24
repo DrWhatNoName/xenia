@@ -46,9 +46,6 @@ public:
 
   int Generate();
 
-  void AddFunctionsToMap(
-      std::tr1::unordered_map<uint32_t, llvm::Function*>& map);
-
 private:
   class CodegenFunction {
   public:
